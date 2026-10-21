@@ -79,7 +79,7 @@ nav button.on{color:var(--accent);font-weight:700}
 <script>
 (function(){
 var K='studyspace-v1';
-var D={accent:'#1F7A74',theme:'system',focus:25,brk:5,goal:10,sessions:[],plan:[],due:[]};
+var D={accent:'#1F7A74',theme:'system',style:'down',focus:25,brk:5,goal:10,sessions:[],plan:[],due:[]};
 function load(){try{var r=localStorage.getItem(K);var o=JSON.parse(JSON.stringify(D));return r?Object.assign(o,JSON.parse(r)):o}catch(e){return JSON.parse(JSON.stringify(D))}}
 function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
 var S=load();
@@ -101,20 +101,25 @@ function applyLook(){
 }
 
 /* Timer */
-var T={mode:'focus',total:S.focus*60,left:S.focus*60,running:false,end:0};
+var T={mode:'focus',total:S.focus*60,left:S.focus*60,running:false,end:0,el:0,t0:0,base:0};
+function isUp(){return S.style==='up'&&T.mode==='focus'}
 var CIRC=2*Math.PI*104;
-function resetT(){T.total=(T.mode==='focus'?S.focus:S.brk)*60;T.left=T.total;T.running=false}
+function resetT(){T.total=(T.mode==='focus'?S.focus:S.brk)*60;T.left=T.total;T.running=false;T.el=0;T.base=0}
 function logFocus(sec){var m=Math.floor(sec/60);if(m>=1){S.sessions.push({d:today(),m:m});save();return m}return 0}
+function pad(n){return (n<10?'0':'')+n}
 function paintT(){
   var t=$('#tm'),r=$('#rg');if(!t)return;
-  var m=Math.floor(T.left/60),s=T.left%60;
-  t.textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
-  r.setAttribute('stroke-dashoffset',CIRC*(1-T.left/T.total));
-  $('#go').textContent=T.running?'Pause':(T.left<T.total?'Resume':'Start');
+  var up=isUp(),sec=up?T.el:T.left,h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),sc=sec%60;
+  t.textContent=(h?h+':':'')+pad(m)+':'+pad(sc);
+  r.setAttribute('stroke-dashoffset',up?CIRC*(1-(T.el%3600)/3600):CIRC*(1-T.left/T.total));
+  var started=up?T.el>0:T.left<T.total;
+  $('#go').textContent=T.running?'Pause':(started?'Resume':'Start');
+  $('#rs').textContent=up?'End session':'Reset';
   document.title=T.running?t.textContent+' · Studyspace':'Studyspace';
 }
 setInterval(function(){
   if(!T.running)return;
+  if(isUp()){T.el=T.base+Math.round((Date.now()-T.t0)/1000);paintT();return}
   T.left=Math.max(0,Math.round((T.end-Date.now())/1000));
   if(T.left===0){
     var wasFocus=T.mode==='focus';
@@ -130,9 +135,9 @@ setInterval(function(){
 /* Views */
 function vFocus(){
   return '<div class="seg"><button data-m="focus" class="'+(T.mode==='focus'?'on':'')+'">Focus</button><button data-m="break" class="'+(T.mode==='break'?'on':'')+'">Break</button></div>'+
-  '<div class="ring"><svg width="240" height="240" viewBox="0 0 240 240"><circle cx="120" cy="120" r="104" fill="none" stroke="var(--line)" stroke-width="10"/><circle id="rg" cx="120" cy="120" r="104" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+CIRC+'" stroke-dashoffset="0"/></svg><div class="t"><div class="time" id="tm">00:00</div><div class="sub">'+(T.mode==='focus'?'Stay with one thing':'Step away for a bit')+'</div></div></div>'+
+  (T.mode==='focus'?'<div class="seg" style="margin-top:-6px"><button data-st="down" class="'+(S.style!=='up'?'on':'')+'">Countdown</button><button data-st="up" class="'+(S.style==='up'?'on':'')+'">Count up</button></div>':'')+'<div class="ring"><svg width="240" height="240" viewBox="0 0 240 240"><circle cx="120" cy="120" r="104" fill="none" stroke="var(--line)" stroke-width="10"/><circle id="rg" cx="120" cy="120" r="104" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+CIRC+'" stroke-dashoffset="0"/></svg><div class="t"><div class="time" id="tm">00:00</div><div class="sub">'+(T.mode==='focus'?(S.style==='up'?'End it when you’re done':'Stay with one thing'):'Step away for a bit')+'</div></div></div>'+
   '<div class="row center"><button class="btn" id="go">Start</button><button class="btn ghost" id="rs">Reset</button></div>'+
-  '<div class="card" style="margin-top:26px"><div class="row"><div class="field"><label for="fm">Focus (minutes)</label><input id="fm" type="number" min="1" max="180" value="'+S.focus+'"></div><div class="field"><label for="bm">Break (minutes)</label><input id="bm" type="number" min="1" max="60" value="'+S.brk+'"></div></div></div>';
+  '<div class="card" style="margin-top:26px"><div class="row">'+(S.style==='up'?'':'<div class="field"><label for="fm">Focus (minutes)</label><input id="fm" type="number" min="1" max="180" value="'+S.focus+'"></div>')+'<div class="field"><label for="bm">Break (minutes)</label><input id="bm" type="number" min="1" max="60" value="'+S.brk+'"></div></div></div>';
 }
 function vPlan(){
   var td=dayIdx(new Date()),out='<div class="card"><div class="row" style="align-items:flex-end"><div class="field"><label for="pd">Day</label><select id="pd">'+DAYS.map(function(d,i){return '<option value="'+i+'"'+(i===td?' selected':'')+'>'+d+'</option>'}).join('')+'</select></div><div class="field"><label for="ps">From</label><input id="ps" type="time" value="16:00"></div><div class="field"><label for="pe">To</label><input id="pe" type="time" value="17:00"></div></div><div class="row" style="margin-top:10px"><input id="pn" placeholder="Subject or task" maxlength="60"><button class="btn" id="pa">Add</button></div></div>';
@@ -204,9 +209,10 @@ document.addEventListener('click',function(e){
   var a=b.dataset;
   if(a.t){tab=a.t;render();return}
   if(b.id==='gear'){tab=tab==='set'?'focus':'set';render();return}
-  if(a.m){if(T.running||T.left<T.total){if(T.mode==='focus')logFocus(T.total-T.left)}T.mode=a.m;resetT();render();return}
-  if(b.id==='go'){if(T.running){T.running=false}else{T.running=true;T.end=Date.now()+T.left*1000}paintT();return}
-  if(b.id==='rs'){if(T.mode==='focus'&&T.left<T.total){var m=logFocus(T.total-T.left);if(m)toast('Logged '+m+' min of focus')}resetT();paintT();return}
+  if(a.st){if(T.mode==='focus'&&(T.running||T.el>0||T.left<T.total)){toast('End or reset the current session first');return}S.style=a.st;save();resetT();render();return}
+  if(a.m){if(T.mode==='focus'){if(isUp()){if(T.running)T.el=T.base+Math.round((Date.now()-T.t0)/1000);logFocus(T.el)}else if(T.running||T.left<T.total){logFocus(T.total-T.left)}}T.mode=a.m;resetT();render();return}
+  if(b.id==='go'){if(T.running){T.running=false;if(isUp()){T.el=T.base+Math.round((Date.now()-T.t0)/1000)}T.base=T.el}else{T.running=true;T.t0=Date.now();T.base=T.el;T.end=Date.now()+T.left*1000}paintT();return}
+  if(b.id==='rs'){if(isUp()){if(T.running)T.el=T.base+Math.round((Date.now()-T.t0)/1000);if(T.el>0){var m0=logFocus(T.el);toast(m0?'Logged '+m0+' min of focus':'Under a minute, so not logged')}}else if(T.mode==='focus'&&T.left<T.total){var m=logFocus(T.total-T.left);if(m)toast('Logged '+m+' min of focus')}resetT();paintT();return}
   if(b.id==='pa'){var n=$('#pn').value.trim(),s=$('#ps').value,en=$('#pe').value;if(!n||!s||!en){toast('Add a subject and times');return}if(en<=s){toast('End time must be after start');return}S.plan.push({id:uid(),day:+$('#pd').value,s:s,e:en,n:n});save();render();return}
   if(a.dp){S.plan=S.plan.filter(function(p){return p.id!==a.dp});save();render();return}
   if(b.id==='da'){var n2=$('#dn').value.trim(),d=$('#dd').value;if(!n2||!d){toast('Add a name and a date');return}S.due.push({id:uid(),n:n2,d:d,t:$('#dt').value,done:0});save();render();return}
