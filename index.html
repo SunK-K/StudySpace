@@ -79,9 +79,9 @@ nav button.on{color:var(--accent);font-weight:700}
 <script>
 (function(){
 var K='studyspace-v1';
-var D={accent:'#1F7A74',theme:'system',style:'down',focus:25,brk:5,goal:10,sessions:[],plan:[],due:[]};
+var D={accent:'#1F7A74',theme:'system',style:'down',rem:1,remTime:'08:00',focus:25,brk:5,goal:10,sessions:[],plan:[],due:[]};
 function load(){try{var r=localStorage.getItem(K);var o=JSON.parse(JSON.stringify(D));return r?Object.assign(o,JSON.parse(r)):o}catch(e){return JSON.parse(JSON.stringify(D))}}
-function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
+function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}scheduleRem()}
 var S=load();
 S.plan=S.plan.map(function(p){if(p.d)return p;var d=new Date(),k=((p.day||0)-dayIdx(d)+7)%7;d.setDate(d.getDate()+k);return {id:p.id||uid(),n:p.n,d:iso(d),t:p.s||'',done:0}});
 var tab='focus';
@@ -133,9 +133,39 @@ setInterval(function(){
   paintT();
 },250);
 
+/* Reminders (native Android app only) */
+var remTimer=0;
+function isNative(){return !!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())}
+function LN(){return isNative()&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications}
+function scheduleRem(){clearTimeout(remTimer);remTimer=setTimeout(doRem,800)}
+async function doRem(){
+  var P=LN();if(!P)return;
+  try{
+    var pend=await P.getPending();
+    if(pend.notifications&&pend.notifications.length)await P.cancel({notifications:pend.notifications});
+    if(!S.rem)return;
+    var perm=await P.checkPermissions();
+    if(perm.display!=='granted'){perm=await P.requestPermissions();if(perm.display!=='granted')return}
+    var now=Date.now(),list=[];
+    function at(day,t){var p=(t||S.remTime||'08:00').split(':'),d=new Date(day+'T00:00');d.setHours(+p[0]||0,+p[1]||0,0,0);return d}
+    function add(when,title,body){if(when.getTime()>now+60000)list.push({title:title,body:body,schedule:{at:when,allowWhileIdle:true}})}
+    S.due.forEach(function(x){
+      if(x.done)return;
+      var db=new Date(x.d+'T00:00');db.setDate(db.getDate()-1);
+      if(x.t==='Exam')add(at(iso(db)),'Exam tomorrow: '+x.n,'Time for a last review.');
+      add(at(x.d),(x.t==='Exam'?'Exam today: ':'Due today: ')+x.n,'Good luck. You have got this.');
+    });
+    S.plan.forEach(function(x){if(!x.done)add(at(x.d,x.t||''),x.n,x.t?'Starting now.':'On your to-do list today.')});
+    list.sort(function(a,b){return a.schedule.at-b.schedule.at});
+    list=list.slice(0,60).map(function(n,i){n.id=i+1;return n});
+    if(list.length)await P.schedule({notifications:list});
+  }catch(e){}
+}
+
 /* Friends */
 var socLoaded=false,lastWant=false;
 function loadSocial(){
+  if(isNative())return;
   if(socLoaded){if(window.Social)Social.init();return}
   socLoaded=true;
   var sc=document.createElement('script');sc.src='social.js';
@@ -158,6 +188,7 @@ function doFx(k,id){
 }
 function sumKeys(m,f){var d=m.days||{},t=0;Object.keys(d).forEach(function(k){if(f(k))t+=d[k]||0});return t}
 function vFriends(){
+  if(isNative())return '<div class="card"><div class="name">Friends is on the web version</div><p class="sub">Google sign-in does not work inside the Android app yet. To use Friends, open Studyspace in Chrome. Native sign-in can be added later.</p></div>';
   var Q=window.Social,s=Q&&Q.state;
   if(!navigator.onLine)return '<div class="empty">Friends needs an internet connection. Everything else works offline.</div>';
   if(!s||!s.ready)return '<div class="empty">Connecting…</div>';
@@ -242,7 +273,7 @@ function vSoon(){
 var COLORS=['#1F7A74','#4457D6','#3A7D44','#8A4FA0','#C0563A','#5B6573'];
 function vSet(){
   return '<div class="card"><label>Accent color</label><div class="sw">'+COLORS.map(function(c){return '<button data-ac="'+c+'" class="'+(c===S.accent?'on':'')+'" style="background:'+c+'" aria-label="Accent '+c+'"></button>'}).join('')+'</div>'+
-  '<div class="row" style="margin-top:18px"><div class="field"><label for="th">Theme</label><select id="th"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="field"><label for="gl">Weekly goal (hours)</label><input id="gl" type="number" min="1" max="100" value="'+S.goal+'"></div></div></div>'+
+  '<div class="row" style="margin-top:18px"><div class="field"><label for="th">Theme</label><select id="th"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="field"><label for="gl">Weekly goal (hours)</label><input id="gl" type="number" min="1" max="100" value="'+S.goal+'"></div></div><div class="row" style="margin-top:14px"><div class="field"><label for="rm">Reminders</label><select id="rm"><option value="1"'+(S.rem?' selected':'')+'>On</option><option value="0"'+(S.rem?'':' selected')+'>Off</option></select></div><div class="field"><label for="rt">Remind me at</label><input id="rt" type="time" value="'+S.remTime+'"></div></div><div class="sub" style="margin-top:8px">'+(isNative()?'Reminders for exams, assignments and to-dos arrive even when the app is closed.':'Reminders when the app is closed need the Android app.')+'</div></div>'+
   '<div class="row center"><button class="btn ghost" id="clr">Clear all data</button></div>';
 }
 
@@ -282,8 +313,11 @@ document.addEventListener('change',function(e){
   if(i.id==='fm'||i.id==='bm'){var v=Math.max(1,Math.min(i.id==='fm'?180:60,parseInt(i.value)||1));if(i.id==='fm')S.focus=v;else S.brk=v;i.value=v;save();if(!T.running&&T.left===T.total){resetT();paintT()}}
   if(i.id==='th'){S.theme=i.value;save();applyLook()}
   if(i.id==='gl'){S.goal=Math.max(1,parseInt(i.value)||10);save()}
+  if(i.id==='rm'){S.rem=i.value==='1'?1:0;save()}
+  if(i.id==='rt'){S.remTime=i.value||'08:00';save()}
 });
 applyLook();resetT();render();
+scheduleRem();
 var early=dueSoon().filter(function(o){return o.n<=1});
 if(early.length)toast(early.length+(early.length===1?' item is':' items are')+' due today or tomorrow');
 })();
