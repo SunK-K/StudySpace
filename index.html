@@ -84,7 +84,7 @@ function load(){try{var r=localStorage.getItem(K);var o=JSON.parse(JSON.stringif
 function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
 var S=load();
 var tab='focus';
-var TABS=[['focus','Focus'],['plan','Plan'],['due','Due'],['stats','Progress']];
+var TABS=[['focus','Focus'],['plan','Plan'],['due','Due'],['stats','Progress'],['friends','Friends']];
 var DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 var $=function(s){return document.querySelector(s)};
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -105,7 +105,7 @@ var T={mode:'focus',total:S.focus*60,left:S.focus*60,running:false,end:0,el:0,t0
 function isUp(){return S.style==='up'&&T.mode==='focus'}
 var CIRC=2*Math.PI*104;
 function resetT(){T.total=(T.mode==='focus'?S.focus:S.brk)*60;T.left=T.total;T.running=false;T.el=0;T.base=0}
-function logFocus(sec){var m=Math.floor(sec/60);if(m>=1){S.sessions.push({d:today(),m:m});save();return m}return 0}
+function logFocus(sec){var m=Math.floor(sec/60);if(m>=1){S.sessions.push({d:today(),m:m});save();try{if(window.Social)Social.addMinutes(m,today())}catch(e){}return m}return 0}
 function pad(n){return (n<10?'0':'')+n}
 function paintT(){
   var t=$('#tm'),r=$('#rg');if(!t)return;
@@ -131,6 +131,58 @@ setInterval(function(){
   }
   paintT();
 },250);
+
+/* Friends */
+var socLoaded=false,lastWant=false;
+function loadSocial(){
+  if(socLoaded){if(window.Social)Social.init();return}
+  socLoaded=true;
+  var sc=document.createElement('script');sc.src='social.js';
+  sc.onload=function(){Social.init()};
+  sc.onerror=function(){socLoaded=false;toast('Could not load Friends. Check your internet.')};
+  document.head.appendChild(sc);
+}
+window.onSocial=function(){var ae=document.activeElement;if(tab==='friends'&&!(ae&&ae.closest&&ae.closest('#view')&&ae.tagName==='INPUT'))render()};
+setInterval(function(){var w=T.running&&T.mode==='focus';if(w!==lastWant){lastWant=w;try{if(window.Social)Social.setStudying(w)}catch(e){}}},1000);
+function doFx(k,id){
+  var Q=window.Social;if(!Q)return;
+  if(k==='in')Q.signIn();
+  else if(k==='out'){if(confirm('Sign out of Friends?'))Q.signOut()}
+  else if(k==='create'){var n=$('#gn').value.trim();if(!n){toast('Give the group a name');return}Q.createGroup(n)}
+  else if(k==='join'){var c=$('#gc').value.trim();if(c.length<6){toast('Enter the invite code');return}Q.join(c)}
+  else if(k==='leave'){if(confirm('Leave this group? Your weekly hours there will be removed.'))Q.leave()}
+  else if(k==='copy'){var msg='Join my study group on Studyspace. Invite code: '+Q.state.gid;if(navigator.share){navigator.share({text:msg}).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(Q.state.gid).then(function(){toast('Code copied')})}}
+  else if(k==='chal'){var t=$('#ct').value.trim(),h=+$('#ch').value,d=+$('#cd').value;if(!t||!(h>0)||!(d>0)){toast('Fill in all three boxes');return}Q.newChallenge(t,h,Math.min(60,Math.round(d)))}
+  else if(k==='delc')Q.delChallenge(id);
+}
+function sumKeys(m,f){var d=m.days||{},t=0;Object.keys(d).forEach(function(k){if(f(k))t+=d[k]||0});return t}
+function vFriends(){
+  var Q=window.Social,s=Q&&Q.state;
+  if(!navigator.onLine)return '<div class="empty">Friends needs an internet connection. Everything else works offline.</div>';
+  if(!s||!s.ready)return '<div class="empty">Connecting…</div>';
+  var err=s.err?'<div class="empty" style="color:var(--warn)">'+esc(s.err)+'</div>':'';
+  if(!s.user)return err+'<div class="card"><div class="name">Study with friends</div><p class="sub">Sign in to join a group, see who is studying, and compare weekly hours. Only your first name and study time are shared, and only with your group.</p><button class="btn" data-fx="in">Sign in with Google</button></div>';
+  var foot='<div class="row center"><button class="btn ghost" data-fx="out">Sign out</button></div>';
+  if(!s.gid)return err+'<div class="card"><div class="name">Create a group</div><div class="row" style="margin-top:10px"><input id="gn" placeholder="Group name" maxlength="40"><button class="btn" data-fx="create">Create</button></div></div><div class="card" style="margin-top:16px"><div class="name">Join with a code</div><div class="row" style="margin-top:10px"><input id="gc" placeholder="Invite code" maxlength="12" autocapitalize="characters"><button class="btn" data-fx="join">Join</button></div></div>'+foot;
+  if(!s.group)return err+'<div class="empty">Loading your group…</div><div class="row center"><button class="btn ghost" data-fx="leave">Leave group</button></div>';
+  var keys=weekKeys(),me=s.user.uid,ms=s.members.slice();
+  var rows=ms.map(function(m){return {m:m,w:sumKeys(m,function(k){return keys.indexOf(k)>-1}),on:Q.isStudying(m)}}).sort(function(a,b){return b.w-a.w});
+  var mx=Math.max(1,rows.length?rows[0].w:1);
+  var out=err+'<div class="card"><div class="sub">Group</div><div class="big" style="font-size:24px">'+esc(s.group.name)+'</div><div class="row" style="margin-top:10px"><div class="sub">Invite code</div><div class="name" style="letter-spacing:.12em">'+esc(s.gid)+'</div><button class="btn ghost" data-fx="copy" style="margin-left:auto;padding:8px 14px">Share</button></div></div>';
+  out+='<h2>Studying now</h2><div class="card">'+rows.map(function(r){return '<div class="item"><span style="width:10px;height:10px;border-radius:50%;flex:none;background:'+(r.on?'var(--accent)':'var(--line)')+'"></span><div class="grow"><div class="name">'+esc(r.m.name||'Friend')+(r.m.id===me?' (you)':'')+'</div></div><span class="chip'+(r.on?' soon':'')+'">'+(r.on?'Studying':'Not studying')+'</span></div>'}).join('')+'</div>';
+  out+='<h2>This week</h2><div class="card">'+rows.map(function(r){return '<div style="padding:8px 0"><div class="row"><div class="name" style="flex:1">'+esc(r.m.name||'Friend')+(r.m.id===me?' (you)':'')+'</div><div class="chip">'+fmt(r.w)+'</div></div><div class="prog"><b style="width:'+Math.round(r.w/mx*100)+'%"></b></div></div>'}).join('')+'</div>';
+  var t0=today(),ch=s.challenges.slice().sort(function(a,b){return a.end<b.end?1:-1});
+  out+='<h2>Challenges</h2>';
+  if(!ch.length)out+='<div class="empty">No challenges yet. Start one below.</div>';
+  ch.forEach(function(c){
+    var live=c.end>=t0,res=ms.map(function(m){return {n:(m.name||'Friend')+(m.id===me?' (you)':''),v:sumKeys(m,function(k){return k>=c.start&&k<=c.end})}}).sort(function(a,b){return b.v-a.v});
+    out+='<div class="card" style="margin-bottom:12px"><div class="row"><div class="name" style="flex:1">'+esc(c.title)+'</div>'+(c.by===me?'<button class="x" data-fx="delc" data-id="'+esc(c.id)+'" aria-label="Delete">×</button>':'')+'</div><div class="chip">Goal '+fmt(c.target)+' · '+c.start+' to '+c.end+(live?'':' · ended')+'</div>'+res.map(function(r){var p=Math.min(100,Math.round(r.v/c.target*100));return '<div style="padding-top:10px"><div class="row"><div style="flex:1">'+esc(r.n)+(r.v>=c.target?' ✓':'')+'</div><div class="chip">'+fmt(r.v)+'</div></div><div class="prog"><b style="width:'+p+'%"></b></div></div>'}).join('')+'</div>';
+  });
+  out+='<div class="card"><div class="name">New challenge</div><div class="row" style="margin-top:10px"><input id="ct" placeholder="Name, e.g. Exam week push" maxlength="50"></div><div class="row" style="margin-top:10px"><div class="field"><label for="ch">Goal (hours)</label><input id="ch" type="number" min="1" max="200" value="10"></div><div class="field"><label for="cd">Days</label><input id="cd" type="number" min="1" max="60" value="7"></div></div><div class="row" style="margin-top:12px"><button class="btn" data-fx="chal">Start challenge</button></div></div>';
+  out+='<div class="row center"><button class="btn ghost" data-fx="leave">Leave group</button><button class="btn ghost" data-fx="out">Sign out</button></div>';
+  return out;
+}
+function weekKeys(){var now=new Date(),ws=new Date(now),k=[];ws.setDate(now.getDate()-dayIdx(now));for(var i=0;i<7;i++){var d=new Date(ws);d.setDate(ws.getDate()+i);k.push(iso(d))}return k}
 
 /* Views */
 function vFocus(){
@@ -194,10 +246,11 @@ function vSet(){
 }
 
 function render(){
-  var ttl={focus:'Focus',plan:'Study plan',due:'Due soon',stats:'Progress',set:'Settings'};
+  var ttl={focus:'Focus',plan:'Study plan',due:'Due soon',stats:'Progress',friends:'Friends',set:'Settings'};
   $('#ttl').textContent=ttl[tab];
+  if(tab==='friends')loadSocial();
   $('#tabs').innerHTML=TABS.map(function(t){return '<button data-t="'+t[0]+'" class="'+(tab===t[0]?'on':'')+'">'+t[1]+'</button>'}).join('');
-  $('#view').innerHTML={focus:vFocus,plan:vPlan,due:vDue,stats:vStats,set:vSet}[tab]();
+  $('#view').innerHTML={focus:vFocus,plan:vPlan,due:vDue,stats:vStats,friends:vFriends,set:vSet}[tab]();
   if(tab==='focus')$('#view').insertAdjacentHTML('beforeend',vSoon());
   if(tab==='set')$('#th').value=S.theme;
   paintT();
@@ -207,6 +260,7 @@ function render(){
 document.addEventListener('click',function(e){
   var b=e.target.closest('button');if(!b)return;
   var a=b.dataset;
+  if(a.fx){doFx(a.fx,a.id);return}
   if(a.t){tab=a.t;render();return}
   if(b.id==='gear'){tab=tab==='set'?'focus':'set';render();return}
   if(a.st){if(T.mode==='focus'&&(T.running||T.el>0||T.left<T.total)){toast('End or reset the current session first');return}S.style=a.st;save();resetT();render();return}
