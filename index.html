@@ -83,8 +83,9 @@ var D={accent:'#1F7A74',theme:'system',style:'down',focus:25,brk:5,goal:10,sessi
 function load(){try{var r=localStorage.getItem(K);var o=JSON.parse(JSON.stringify(D));return r?Object.assign(o,JSON.parse(r)):o}catch(e){return JSON.parse(JSON.stringify(D))}}
 function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
 var S=load();
+S.plan=S.plan.map(function(p){if(p.d)return p;var d=new Date(),k=((p.day||0)-dayIdx(d)+7)%7;d.setDate(d.getDate()+k);return {id:p.id||uid(),n:p.n,d:iso(d),t:p.s||'',done:0}});
 var tab='focus';
-var TABS=[['focus','Focus'],['plan','Plan'],['due','Due'],['stats','Progress'],['friends','Friends']];
+var TABS=[['focus','Focus'],['plan','To-do'],['due','Due'],['stats','Progress'],['friends','Friends']];
 var DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 var $=function(s){return document.querySelector(s)};
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -192,15 +193,15 @@ function vFocus(){
   '<div class="card" style="margin-top:26px"><div class="row">'+(S.style==='up'?'':'<div class="field"><label for="fm">Focus (minutes)</label><input id="fm" type="number" min="1" max="180" value="'+S.focus+'"></div>')+'<div class="field"><label for="bm">Break (minutes)</label><input id="bm" type="number" min="1" max="60" value="'+S.brk+'"></div></div></div>';
 }
 function vPlan(){
-  var td=dayIdx(new Date()),out='<div class="card"><div class="row" style="align-items:flex-end"><div class="field"><label for="pd">Day</label><select id="pd">'+DAYS.map(function(d,i){return '<option value="'+i+'"'+(i===td?' selected':'')+'>'+d+'</option>'}).join('')+'</select></div><div class="field"><label for="ps">From</label><input id="ps" type="time" value="16:00"></div><div class="field"><label for="pe">To</label><input id="pe" type="time" value="17:00"></div></div><div class="row" style="margin-top:10px"><input id="pn" placeholder="Subject or task" maxlength="60"><button class="btn" id="pa">Add</button></div></div>';
-  var any=false;
-  for(var k=0;k<7;k++){
-    var i=(td+k)%7;
-    var items=S.plan.filter(function(p){return p.day===i}).sort(function(a,b){return a.s<b.s?-1:1});
-    if(!items.length)continue;any=true;
-    out+='<h2>'+(k===0?'Today':DAYS[i])+'</h2><div class="card">'+items.map(function(p){return '<div class="item"><div class="grow"><div class="name">'+esc(p.n)+'</div><div class="chip">'+p.s+' – '+p.e+'</div></div><button class="x" data-dp="'+p.id+'" aria-label="Delete">×</button></div>'}).join('')+'</div>';
-  }
-  if(!any)out+='<div class="empty">No study blocks yet. Add your first one above.</div>';
+  var t0=new Date(today()+'T00:00');
+  var items=S.plan.slice().sort(function(a,b){return a.done-b.done||((a.d+(a.t||''))<(b.d+(b.t||''))?-1:1)});
+  var out='<div class="card"><div class="row"><input id="pn" placeholder="What do you need to do?" maxlength="80" aria-label="Task"></div><div class="row" style="margin-top:10px;align-items:flex-end"><div class="field"><label for="pd">Date</label><input id="pd" type="date" value="'+today()+'"></div><div class="field"><label for="pt">Time (optional)</label><input id="pt" type="time"></div><button class="btn" id="pa">Add</button></div></div>';
+  if(!items.length)return out+'<div class="empty">Nothing planned yet. Add your first task above.</div>';
+  out+='<div class="card" style="margin-top:16px">'+items.map(function(x){
+    var n=Math.round((new Date(x.d+'T00:00')-t0)/864e5),c='',lab;
+    if(x.done){lab='Done'}else if(n<0){lab='Overdue';c='late'}else if(n===0){lab='Today';c='soon'}else if(n===1){lab='Tomorrow'}else lab='in '+n+' days';
+    return '<div class="item'+(x.done?' done':'')+'"><button class="chk'+(x.done?' on':'')+'" data-pk="'+x.id+'" aria-label="Mark done">'+(x.done?'✓':'')+'</button><div class="grow"><div class="name">'+esc(x.n)+'</div><div class="chip">'+new Date(x.d+'T00:00').toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'})+(x.t?' · '+x.t:'')+'</div></div><span class="chip '+c+'">'+lab+'</span><button class="x" data-dp="'+x.id+'" aria-label="Delete">×</button></div>';
+  }).join('')+'</div>';
   return out;
 }
 function vDue(){
@@ -246,7 +247,7 @@ function vSet(){
 }
 
 function render(){
-  var ttl={focus:'Focus',plan:'Study plan',due:'Due soon',stats:'Progress',friends:'Friends',set:'Settings'};
+  var ttl={focus:'Focus',plan:'To-do list',due:'Due soon',stats:'Progress',friends:'Friends',set:'Settings'};
   $('#ttl').textContent=ttl[tab];
   if(tab==='friends')loadSocial();
   $('#tabs').innerHTML=TABS.map(function(t){return '<button data-t="'+t[0]+'" class="'+(tab===t[0]?'on':'')+'">'+t[1]+'</button>'}).join('');
@@ -267,7 +268,8 @@ document.addEventListener('click',function(e){
   if(a.m){if(T.mode==='focus'){if(isUp()){if(T.running)T.el=T.base+Math.round((Date.now()-T.t0)/1000);logFocus(T.el)}else if(T.running||T.left<T.total){logFocus(T.total-T.left)}}T.mode=a.m;resetT();render();return}
   if(b.id==='go'){if(T.running){T.running=false;if(isUp()){T.el=T.base+Math.round((Date.now()-T.t0)/1000)}T.base=T.el}else{T.running=true;T.t0=Date.now();T.base=T.el;T.end=Date.now()+T.left*1000}paintT();return}
   if(b.id==='rs'){if(isUp()){if(T.running)T.el=T.base+Math.round((Date.now()-T.t0)/1000);if(T.el>0){var m0=logFocus(T.el);toast(m0?'Logged '+m0+' min of focus':'Under a minute, so not logged')}}else if(T.mode==='focus'&&T.left<T.total){var m=logFocus(T.total-T.left);if(m)toast('Logged '+m+' min of focus')}resetT();paintT();return}
-  if(b.id==='pa'){var n=$('#pn').value.trim(),s=$('#ps').value,en=$('#pe').value;if(!n||!s||!en){toast('Add a subject and times');return}if(en<=s){toast('End time must be after start');return}S.plan.push({id:uid(),day:+$('#pd').value,s:s,e:en,n:n});save();render();return}
+  if(b.id==='pa'){var n=$('#pn').value.trim(),d3=$('#pd').value;if(!n||!d3){toast('Add a task and a date');return}S.plan.push({id:uid(),n:n,d:d3,t:$('#pt').value,done:0});save();render();return}
+  if(a.pk){S.plan.forEach(function(x){if(x.id===a.pk)x.done=x.done?0:1});save();render();return}
   if(a.dp){S.plan=S.plan.filter(function(p){return p.id!==a.dp});save();render();return}
   if(b.id==='da'){var n2=$('#dn').value.trim(),d=$('#dd').value;if(!n2||!d){toast('Add a name and a date');return}S.due.push({id:uid(),n:n2,d:d,t:$('#dt').value,done:0});save();render();return}
   if(a.dk){S.due.forEach(function(x){if(x.id===a.dk)x.done=x.done?0:1});save();render();return}
