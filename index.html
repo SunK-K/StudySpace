@@ -136,7 +136,20 @@ setInterval(function(){
 /* Reminders (native Android app only) */
 var remTimer=0;
 function isNative(){return !!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())}
-function LN(){return isNative()&&Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications}
+function LN(){if(!isNative())return null;return (Capacitor.Plugins&&Capacitor.Plugins.LocalNotifications)||(Capacitor.registerPlugin?Capacitor.registerPlugin('LocalNotifications'):null)}
+async function remTest(k){
+  var P=LN();
+  if(!P){toast('Notifications plugin not found in this app');return}
+  try{
+    var perm=await P.checkPermissions();
+    if(perm.display!=='granted')perm=await P.requestPermissions();
+    if(perm.display!=='granted'){toast('Notifications are blocked. Turn them on in Android Settings, Apps, Studyspace.');return}
+    var n={id:999,title:'Studyspace test',body:k==='now'?'Notifications work.':'The scheduled test arrived.'};
+    if(k!=='now')n.schedule={at:new Date(Date.now()+60000),allowWhileIdle:true};
+    await P.schedule({notifications:[n]});
+    toast(k==='now'?'Test sent':'Test set for 1 minute from now');
+  }catch(e){toast('Error: '+(e&&e.message?e.message:e))}
+}
 function scheduleRem(){clearTimeout(remTimer);remTimer=setTimeout(doRem,800)}
 async function doRem(){
   var P=LN();if(!P)return;
@@ -279,7 +292,7 @@ function vSoon(){
 var COLORS=['#1F7A74','#4457D6','#3A7D44','#8A4FA0','#C0563A','#5B6573'];
 function vSet(){
   return '<div class="card"><label>Accent color</label><div class="sw">'+COLORS.map(function(c){return '<button data-ac="'+c+'" class="'+(c===S.accent?'on':'')+'" style="background:'+c+'" aria-label="Accent '+c+'"></button>'}).join('')+'</div>'+
-  '<div class="row" style="margin-top:18px"><div class="field"><label for="th">Theme</label><select id="th"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="field"><label for="gl">Weekly goal (hours)</label><input id="gl" type="number" min="1" max="100" value="'+S.goal+'"></div></div><div class="row" style="margin-top:14px"><div class="field"><label for="rm">Reminders</label><select id="rm"><option value="1"'+(S.rem?' selected':'')+'>On</option><option value="0"'+(S.rem?'':' selected')+'>Off</option></select></div><div class="field"><label for="rt">Remind me at</label><input id="rt" type="time" value="'+S.remTime+'"></div></div><div class="sub" style="margin-top:8px">'+(isNative()?'Reminders for exams, assignments and to-dos arrive even when the app is closed.':'Reminders when the app is closed need the Android app.')+'</div></div>'+
+  '<div class="row" style="margin-top:18px"><div class="field"><label for="th">Theme</label><select id="th"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="field"><label for="gl">Weekly goal (hours)</label><input id="gl" type="number" min="1" max="100" value="'+S.goal+'"></div></div><div class="row" style="margin-top:14px"><div class="field"><label for="rm">Reminders</label><select id="rm"><option value="1"'+(S.rem?' selected':'')+'>On</option><option value="0"'+(S.rem?'':' selected')+'>Off</option></select></div><div class="field"><label for="rt">Remind me at</label><input id="rt" type="time" value="'+S.remTime+'"></div></div><div class="sub" style="margin-top:8px">'+(isNative()?'Reminders for exams, assignments and to-dos arrive even when the app is closed.':'Reminders when the app is closed need the Android app.')+'</div>'+(isNative()?'<div class="row" style="margin-top:12px"><button class="btn ghost" data-rt="now">Send test now</button><button class="btn ghost" data-rt="soon">Test in 1 min</button></div>':'')+'</div>'+
   '<div class="row center"><button class="btn ghost" id="clr">Clear all data</button></div>';
 }
 
@@ -298,6 +311,7 @@ function render(){
 document.addEventListener('click',function(e){
   var b=e.target.closest('button');if(!b)return;
   var a=b.dataset;
+  if(a.rt){remTest(a.rt);return}
   if(a.fx){doFx(a.fx,a.id,a.cid);return}
   if(a.t){tab=a.t;render();return}
   if(b.id==='gear'){tab=tab==='set'?'focus':'set';render();return}
