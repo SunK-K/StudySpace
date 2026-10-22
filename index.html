@@ -175,44 +175,50 @@ function loadSocial(){
 }
 window.onSocial=function(){var ae=document.activeElement;if(tab==='friends'&&!(ae&&ae.closest&&ae.closest('#view')&&ae.tagName==='INPUT'))render()};
 setInterval(function(){var w=T.running&&T.mode==='focus';if(w!==lastWant){lastWant=w;try{if(window.Social)Social.setStudying(w)}catch(e){}}},1000);
-function doFx(k,id){
+function doFx(k,id,cid){
   var Q=window.Social;if(!Q)return;
   if(k==='in')Q.signIn();
   else if(k==='out'){if(confirm('Sign out of Friends?'))Q.signOut()}
-  else if(k==='create'){var n=$('#gn').value.trim();if(!n){toast('Give the group a name');return}Q.createGroup(n)}
-  else if(k==='join'){var c=$('#gc').value.trim();if(c.length<6){toast('Enter the invite code');return}Q.join(c)}
-  else if(k==='leave'){if(confirm('Leave this group? Your weekly hours there will be removed.'))Q.leave()}
-  else if(k==='copy'){var msg='Join my study group on Studyspace. Invite code: '+Q.state.gid;if(navigator.share){navigator.share({text:msg}).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(Q.state.gid).then(function(){toast('Code copied')})}}
-  else if(k==='chal'){var t=$('#ct').value.trim(),h=+$('#ch').value,d=+$('#cd').value;if(!t||!(h>0)||!(d>0)){toast('Fill in all three boxes');return}Q.newChallenge(t,h,Math.min(60,Math.round(d)))}
-  else if(k==='delc')Q.delChallenge(id);
+  else if(k==='add'){var c=$('#gc').value.trim();if(c.length<6){toast('Enter their friend code');return}Q.addFriend(c)}
+  else if(k==='acc')Q.accept(id);
+  else if(k==='rm'){if(confirm('Remove this friend or request?'))Q.remove(id)}
+  else if(k==='copy'){var msg='Add me on Studyspace. My friend code: '+Q.state.code;if(navigator.share){navigator.share({text:msg}).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(Q.state.code).then(function(){toast('Code copied')})}}
+  else if(k==='chal'){var t=$('#ct').value.trim(),h=+$('#ch').value,d=+$('#cd').value,f=$('#cf').value;if(!f||!t||!(h>0)||!(d>0)){toast('Fill in all the boxes');return}Q.newChallenge(f,t,h,Math.min(60,Math.round(d)))}
+  else if(k==='delc')Q.delChallenge(id,cid);
 }
-function sumKeys(m,f){var d=m.days||{},t=0;Object.keys(d).forEach(function(k){if(f(k))t+=d[k]||0});return t}
+function sumKeys(m,f){var d=(m&&m.days)||{},t=0;Object.keys(d).forEach(function(k){if(f(k))t+=d[k]||0});return t}
 function vFriends(){
   if(isNative())return '<div class="card"><div class="name">Friends is on the web version</div><p class="sub">Google sign-in does not work inside the Android app yet. To use Friends, open Studyspace in Chrome. Native sign-in can be added later.</p></div>';
   var Q=window.Social,s=Q&&Q.state;
   if(!navigator.onLine)return '<div class="empty">Friends needs an internet connection. Everything else works offline.</div>';
   if(!s||!s.ready)return '<div class="empty">Connecting…</div>';
   var err=s.err?'<div class="empty" style="color:var(--warn)">'+esc(s.err)+'</div>':'';
-  if(!s.user)return err+'<div class="card"><div class="name">Study with friends</div><p class="sub">Sign in to join a group, see who is studying, and compare weekly hours. Only your first name and study time are shared, and only with your group.</p><button class="btn" data-fx="in">Sign in with Google</button></div>';
-  var foot='<div class="row center"><button class="btn ghost" data-fx="out">Sign out</button></div>';
-  if(!s.gid)return err+'<div class="card"><div class="name">Create a group</div><div class="row" style="margin-top:10px"><input id="gn" placeholder="Group name" maxlength="40"><button class="btn" data-fx="create">Create</button></div></div><div class="card" style="margin-top:16px"><div class="name">Join with a code</div><div class="row" style="margin-top:10px"><input id="gc" placeholder="Invite code" maxlength="12" autocapitalize="characters"><button class="btn" data-fx="join">Join</button></div></div>'+foot;
-  if(!s.group)return err+'<div class="empty">Loading your group…</div><div class="row center"><button class="btn ghost" data-fx="leave">Leave group</button></div>';
-  var keys=weekKeys(),me=s.user.uid,ms=s.members.slice();
-  var rows=ms.map(function(m){return {m:m,w:sumKeys(m,function(k){return keys.indexOf(k)>-1}),on:Q.isStudying(m)}}).sort(function(a,b){return b.w-a.w});
-  var mx=Math.max(1,rows.length?rows[0].w:1);
-  var out=err+'<div class="card"><div class="sub">Group</div><div class="big" style="font-size:24px">'+esc(s.group.name)+'</div><div class="row" style="margin-top:10px"><div class="sub">Invite code</div><div class="name" style="letter-spacing:.12em">'+esc(s.gid)+'</div><button class="btn ghost" data-fx="copy" style="margin-left:auto;padding:8px 14px">Share</button></div></div>';
-  out+='<h2>Studying now</h2><div class="card">'+rows.map(function(r){return '<div class="item"><span style="width:10px;height:10px;border-radius:50%;flex:none;background:'+(r.on?'var(--accent)':'var(--line)')+'"></span><div class="grow"><div class="name">'+esc(r.m.name||'Friend')+(r.m.id===me?' (you)':'')+'</div></div><span class="chip'+(r.on?' soon':'')+'">'+(r.on?'Studying':'Not studying')+'</span></div>'}).join('')+'</div>';
-  out+='<h2>This week</h2><div class="card">'+rows.map(function(r){return '<div style="padding:8px 0"><div class="row"><div class="name" style="flex:1">'+esc(r.m.name||'Friend')+(r.m.id===me?' (you)':'')+'</div><div class="chip">'+fmt(r.w)+'</div></div><div class="prog"><b style="width:'+Math.round(r.w/mx*100)+'%"></b></div></div>'}).join('')+'</div>';
-  var t0=today(),ch=s.challenges.slice().sort(function(a,b){return a.end<b.end?1:-1});
-  out+='<h2>Challenges</h2>';
-  if(!ch.length)out+='<div class="empty">No challenges yet. Start one below.</div>';
-  ch.forEach(function(c){
-    var live=c.end>=t0,res=ms.map(function(m){return {n:(m.name||'Friend')+(m.id===me?' (you)':''),v:sumKeys(m,function(k){return k>=c.start&&k<=c.end})}}).sort(function(a,b){return b.v-a.v});
-    out+='<div class="card" style="margin-bottom:12px"><div class="row"><div class="name" style="flex:1">'+esc(c.title)+'</div>'+(c.by===me?'<button class="x" data-fx="delc" data-id="'+esc(c.id)+'" aria-label="Delete">×</button>':'')+'</div><div class="chip">Goal '+fmt(c.target)+' · '+c.start+' to '+c.end+(live?'':' · ended')+'</div>'+res.map(function(r){var p=Math.min(100,Math.round(r.v/c.target*100));return '<div style="padding-top:10px"><div class="row"><div style="flex:1">'+esc(r.n)+(r.v>=c.target?' ✓':'')+'</div><div class="chip">'+fmt(r.v)+'</div></div><div class="prog"><b style="width:'+p+'%"></b></div></div>'}).join('')+'</div>';
+  if(!s.user)return err+'<div class="card"><div class="name">Study with friends</div><p class="sub">Sign in to add friends, see when they are studying, and compare weekly hours. Only your first name and study time are shared, and only with friends you accept.</p><button class="btn" data-fx="in">Sign in with Google</button></div>';
+  var me=s.user.uid,keys=weekKeys(),inK=function(k){return keys.indexOf(k)>-1};
+  var fr=s.pairs.filter(function(p){return p.status==='accepted'});
+  var inc=s.pairs.filter(function(p){return p.status==='pending'&&p.by!==me}),outg=s.pairs.filter(function(p){return p.status==='pending'&&p.by===me});
+  var o=err+'<div class="card"><div class="sub">Your friend code</div><div class="row" style="margin-top:6px"><div class="big" style="font-size:26px;letter-spacing:.12em;flex:1">'+esc(s.code||'…')+'</div><button class="btn ghost" data-fx="copy" style="padding:8px 14px">Share</button></div></div>';
+  o+='<div class="card" style="margin-top:16px"><div class="name">Add a friend</div><div class="row" style="margin-top:10px"><input id="gc" placeholder="Their friend code" maxlength="12" autocapitalize="characters"><button class="btn" data-fx="add">Add</button></div></div>';
+  if(inc.length||outg.length)o+='<h2>Requests</h2><div class="card">'+inc.map(function(p){return '<div class="item"><div class="grow"><div class="name">'+esc(p.name)+'</div><div class="chip">Wants to be friends</div></div><button class="btn" data-fx="acc" data-id="'+esc(p.id)+'" style="padding:8px 14px">Accept</button><button class="x" data-fx="rm" data-id="'+esc(p.id)+'" aria-label="Decline">×</button></div>'}).join('')+outg.map(function(p){return '<div class="item"><div class="grow"><div class="name">'+esc(p.name)+'</div><div class="chip">Waiting for them to accept</div></div><button class="x" data-fx="rm" data-id="'+esc(p.id)+'" aria-label="Cancel">×</button></div>'}).join('')+'</div>';
+  if(!fr.length)return o+'<div class="empty">No friends yet. Share your code, or enter a friend’s code above.</div><div class="row center"><button class="btn ghost" data-fx="out">Sign out</button></div>';
+  var rows=[{n:'You',m:s.me,id:''}].concat(fr.map(function(p){return {n:(p.profile&&p.profile.name)||p.name,m:p.profile,id:p.id}})).map(function(r){return {n:r.n,id:r.id,w:sumKeys(r.m,inK),on:Q.isStudying(r.m)}}).sort(function(a,b){return b.w-a.w});
+  var mx=Math.max(1,rows[0].w);
+  o+='<h2>Studying now</h2><div class="card">'+rows.map(function(r){return '<div class="item"><span style="width:10px;height:10px;border-radius:50%;flex:none;background:'+(r.on?'var(--accent)':'var(--line)')+'"></span><div class="grow"><div class="name">'+esc(r.n)+'</div></div><span class="chip'+(r.on?' soon':'')+'">'+(r.on?'Studying':'Not studying')+'</span></div>'}).join('')+'</div>';
+  o+='<h2>This week</h2><div class="card">'+rows.map(function(r){return '<div style="padding:8px 0"><div class="row"><div class="name" style="flex:1">'+esc(r.n)+'</div><div class="chip">'+fmt(r.w)+'</div></div><div class="prog"><b style="width:'+Math.round(r.w/mx*100)+'%"></b></div></div>'}).join('')+'</div>';
+  o+='<h2>Friends</h2><div class="card">'+fr.map(function(p){return '<div class="item"><div class="grow"><div class="name">'+esc((p.profile&&p.profile.name)||p.name)+'</div></div><button class="x" data-fx="rm" data-id="'+esc(p.id)+'" aria-label="Remove friend">×</button></div>'}).join('')+'</div>';
+  var chs=[];fr.forEach(function(p){(p.ch||[]).forEach(function(c){chs.push({p:p,c:c})})});
+  chs.sort(function(a,b){return a.c.end<b.c.end?1:-1});
+  o+='<h2>Challenges</h2>';
+  if(!chs.length)o+='<div class="empty">No challenges yet. Start one below.</div>';
+  var t0=today();
+  chs.forEach(function(x){
+    var c=x.c,f=function(k){return k>=c.start&&k<=c.end};
+    var list=[{n:'You',v:sumKeys(s.me,f)},{n:(x.p.profile&&x.p.profile.name)||x.p.name,v:sumKeys(x.p.profile,f)}].sort(function(a,b){return b.v-a.v});
+    o+='<div class="card" style="margin-bottom:12px"><div class="row"><div class="name" style="flex:1">'+esc(c.title)+'</div><button class="x" data-fx="delc" data-id="'+esc(x.p.id)+'" data-cid="'+esc(c.id)+'" aria-label="Delete">×</button></div><div class="chip">Goal '+fmt(c.target)+' · '+c.start+' to '+c.end+(c.end<t0?' · ended':'')+'</div>'+list.map(function(r){return '<div style="padding-top:10px"><div class="row"><div style="flex:1">'+esc(r.n)+(r.v>=c.target?' ✓':'')+'</div><div class="chip">'+fmt(r.v)+'</div></div><div class="prog"><b style="width:'+Math.min(100,Math.round(r.v/c.target*100))+'%"></b></div></div>'}).join('')+'</div>';
   });
-  out+='<div class="card"><div class="name">New challenge</div><div class="row" style="margin-top:10px"><input id="ct" placeholder="Name, e.g. Exam week push" maxlength="50"></div><div class="row" style="margin-top:10px"><div class="field"><label for="ch">Goal (hours)</label><input id="ch" type="number" min="1" max="200" value="10"></div><div class="field"><label for="cd">Days</label><input id="cd" type="number" min="1" max="60" value="7"></div></div><div class="row" style="margin-top:12px"><button class="btn" data-fx="chal">Start challenge</button></div></div>';
-  out+='<div class="row center"><button class="btn ghost" data-fx="leave">Leave group</button><button class="btn ghost" data-fx="out">Sign out</button></div>';
-  return out;
+  o+='<div class="card"><div class="name">New challenge</div><div class="row" style="margin-top:10px"><div class="field"><label for="cf">With</label><select id="cf">'+fr.map(function(p){return '<option value="'+esc(p.id)+'">'+esc((p.profile&&p.profile.name)||p.name)+'</option>'}).join('')+'</select></div></div><div class="row" style="margin-top:10px"><input id="ct" placeholder="Name, e.g. Exam week push" maxlength="50"></div><div class="row" style="margin-top:10px"><div class="field"><label for="ch">Goal (hours)</label><input id="ch" type="number" min="1" max="200" value="10"></div><div class="field"><label for="cd">Days</label><input id="cd" type="number" min="1" max="60" value="7"></div></div><div class="row" style="margin-top:12px"><button class="btn" data-fx="chal">Start challenge</button></div></div>';
+  o+='<div class="row center"><button class="btn ghost" data-fx="out">Sign out</button></div>';
+  return o;
 }
 function weekKeys(){var now=new Date(),ws=new Date(now),k=[];ws.setDate(now.getDate()-dayIdx(now));for(var i=0;i<7;i++){var d=new Date(ws);d.setDate(ws.getDate()+i);k.push(iso(d))}return k}
 
@@ -292,7 +298,7 @@ function render(){
 document.addEventListener('click',function(e){
   var b=e.target.closest('button');if(!b)return;
   var a=b.dataset;
-  if(a.fx){doFx(a.fx,a.id);return}
+  if(a.fx){doFx(a.fx,a.id,a.cid);return}
   if(a.t){tab=a.t;render();return}
   if(b.id==='gear'){tab=tab==='set'?'focus':'set';render();return}
   if(a.st){if(T.mode==='focus'&&(T.running||T.el>0||T.left<T.total)){toast('End or reset the current session first');return}S.style=a.st;save();resetT();render();return}
