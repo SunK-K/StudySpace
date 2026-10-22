@@ -8,14 +8,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: studyspace-debug-keystore-v1
       - run: npm install
       - run: mkdir -p www && cp index.html social.js manifest.json sw.js icon-192.png icon-512.png www/
       - run: npx cap add android
-      - run: sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <application#' android/app/src/main/AndroidManifest.xml
+      - run: sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <application#' android/app/src/main/AndroidManifest.xml
       - run: npx cap sync android
       - run: chmod +x android/gradlew && cd android && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
